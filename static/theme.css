@@ -4,3 +4,15 @@
   --text-color:           #d4d4d4;
   --text-color-alt:       #858585;
 }
+
+/* Text size as a percentage of the browser default. */
+:root[data-theme="vscode"] {
+  font-size: 175%;
+}
+
+/* Smaller on phones (index.css sets a px size here, so override it). */
+@media screen and (max-width: 480px) {
+  :root[data-theme="vscode"] {
+    font-size: 100%;
+  }
+}

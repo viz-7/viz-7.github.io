@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html data-theme="vscode">
+<head>
+  <meta charset="utf-8">
+  <title>Viz</title>
+  <link rel="stylesheet" href="/mono/src/reset.css" />
+  <link rel="stylesheet" href="/mono/src/index.css" />
+  <link rel="stylesheet" href="/static/theme.css" />
+</head>
+<body>
+  <div id="__header">
+  <table class="header">
+    <tr>
+      <td>
+        <h1 class="title">VISHNU</h1>
+        <span class="subtitle">Physical Intelligence</span>
+      </td>
+    </tr>
+    <tr></tr>
+  </table>
+  <h2>
+    <a href="/index.html">home</a>
+    <a href="/articles/articles.html">articles</a>
+    <a href="/articles/art.html">art</a>
+    <a href="/articles/bookmarks.html">bookmarks</a>
+    <a href="/articles/papers.html">papers</a>
+    <a href="/articles/img.html">images</a>
+  </h2>
+  <h1>craftax_sgs</h1>
+<div class="crab-content">
+<p>
+The code can be found <a href="https://github.com/viz-7/craftax_sgs">here</a>. Adapted from craftax
+<a href="https://github.com/MichaelTMatthews/Craftax_Baselines">baseline</a>.
+</p>
+
+<h1>SGS</h1>
+
+<p>
+Success Guided Sampling(<a href="https://arxiv.org/abs/2610.12465">SGS</a>) is a method introduced by Octi Zhang et al. to help scale RL envs. Instead of randomly initializing parallel envs, we keep a history of the agents' success rate on the seed used to initialize the env, and sample seeds that have a success rate around some percentage(~50%) so that the agent can learn from an env that is not too hard or too easy. On scale, the agent learns from a sparse reward env easily.
+</p>
+<p>
+The original paper focused on robotic tasks, which were divided into 2 categories: 1) Locomotion and 2) Manipulation. Both categories sampled seeds from a pool and trained the agents on sparse rewards (0 if unsuccessful, 1 if the task is completed) along with a couple of regularization terms to make the robot move smoothly.
+</p>
+
+<h1>AlphaNIST</h1>
+
+<p>
+Octi et al. released another paper titled <a href="https://arxiv.org/abs/2610.13354">AlphaNIST</a> soon after SGS. In this paper, they use SGS to train a policy that can assemble a NIST board from only sparse rewards. The policy controlled a Franka Panda arm, and it exhibited many emergent properties, such as using a 2-finger gripper in creative ways to screw nuts of various sizes, long-horizon planning, etc. It was the first single policy to ever accomplish this task.
+</p>
+
+<blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr">(1/6) From @GoogleDeepmind’s AlphaGo to AlphaZero, we saw machines find moves that reached beyond what we’d imagined for them. No one taught them those strategies. They emerged from reinforcement learning: playing, failing, and trying again under a single binary task reward for success or failure. Inspired by them, we couldn’t help but wonder: what might a robot discover if we gave it that same freedom to learn?
+
+That question led us to AlphaNIST. Starting tabula rasa, with that same binary reward plus only a simple control cost, a single policy solves all 20 @NIST assembly tasks at a 98.2% success rate in simulation. More surprising still, AlphaNIST can complete 10 different tasks in a row, receiving that reward only once, after all 10 are done.
+
+Just as AlphaGo’s strategies surprised its creators, AlphaNIST discovered dexterous strategies we couldn’t have come up with ourselves.
+
+Paper: https://t.co/HZBYgG7SWK
+Website: https://t.co/VyUKiYFI2y</p>&mdash; Octi Zhang (@octi_zhang) <a href="https://x.com/octi_zhang/status/2110084633161556468?ref_src=twsrc%5Etfw">October 13, 2026</a></blockquote>
+<script async src="https://platform.x.com/widgets.js" charset="utf-8"></script>
+
+<h1>Craftax</h1>
+
+<p>
+<a href="https://craftaxenv.github.io/">Craftax</a> is a 2d game similar to Minecraft written in Jax. It has multiple achievements such as mining diamonds, sleeping, defeating skeletons, etc., and upon completing any achievement, the agent receives a sparse reward. I managed to modify SGS and apply it to a classic RL problem, which happens to be more dynamic than what the authors worked on.
+</p>
+
+<h1>Core Problem</h1>
+
+<p>
+In AlphaNIST, having a pool of seeds for the initial configuration of the board is possible. But in a more dynamic env like Minecraft, the seed decides a lot, and random sampling is useful. For example, sometimes the seed may cause the agent to spawn in an unideal location. The agent has to learn to escape the local minima and explore richer parts of the env for its survival. Having a fixed pool of seeds is useful for fixed robotics tasks but not ideal for building worlds for agents to explore.
+</p>
+
+<p>
+To fix this issue, I allowed random sampling for the first 400 PPO updates. After that, it is reduced to 30% of the number of parallel envs. The remaining 70% are sampled from an array of seeds that correspond to achievements. Each achievement holds a ring buffer that can store seeds. After each rollout, we check for the achievements achieved by the agent, and we add the seed to the ring buffer corresponding to the achievement it has achieved. Since maintaining the success rate for each seed for every achievement is painful, considering the fact that seeds can get overwritten in the ring buffer, we take an easier approach by maintaining generations for each achievement ring buffer. The higher the generation, the easier it is for the agent to achieve the achievement, as seeds have been filling up the buffer. We use this as a signal to sample from the ring buffers. We sample seeds that are from ring buffers with low generation(the agent finds it difficult to achieve it, or it is rare to find in the env. Either way, we increase the signal quality while scaling up). The remaining 30% makes sure that there is a fresh inflow of seeds to fill the ring buffers, and achievements that are rare to find in an env have a chance of being explored by our agent.
+</p>
+
+<h1>Ablation</h1>
+
+<p>
+DISCLAIMER: AS OF THE TIME OF WRITING, I AM GPU POOR :( I couldn't scale the envs to more than 2.8k(Nvidia L4). This ablation is uniform sampling vs modified SGS, and even though the difference is small, one can see that the modified SGS is useful on classic RL problems, and it seems promising.
+</p>
+
+<p>
+<ul>
+<li>orange: SGS</li>
+<li>blue: uniform sampling</li>
+</ul>
+</p>
+
+<h2>Mining</h2>
+
+<p>
+<img src="/image/sgs/sgs_collect_coal.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_collect_diamond.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_collect_ruby.png" style="width: 40%; height: 40%;">
+</p>
+
+<p>
+As you can see, SGS prioritizes env seeds where the agent has to mine diamond, ruby, etc.
+which are harder to find than coal.
+</p>
+
+<h2>Fighting</h2>
+
+<p>
+<img src="/image/sgs/sgs_defeat_skel.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_defeat_orc.png" style="width: 40%; height: 40%;">
+</p>
+
+<p>
+SGS forces the agent to play in envs that require it to defeat harder and harder enemies. Around
+400 ppo updates, when the SGS kicks in, you can see that it stops sampling easy env where the agent
+has to fight skeletons. It starts to sample env where harder enemies are present.
+</p>
+
+<h2>Exploration</h2>
+
+<p>
+<img src="/image/sgs/sgs_enter_dungeon.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_enter_gnomish.png" style="width: 40%; height: 40%;">
+</p>
+
+<p>
+In the craftax baseline, the authors used ideas such as ICM(Intrinsic Curiosity Module)
+and E3B(Exploration via Elliptical Episodic Bonuses) to tackle the sparse reward problem. SGS does not
+require these ideas.
+</p>
+
+<h2>Eating</h2>
+
+<p>
+<img src="/image/sgs/sgs_eat_cow.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_eat_snail.png" style="width: 40%; height: 40%;">
+</p>
+
+<p>
+In the craftax <a href="https://arxiv.org/abs/2402.16801">paper</a>, table 6 maps achievement to difficulty.
+Eating snail is harder than cow because snails are only found in dungeon. Collecting diamonds are harder
+than wood and coal. SGS spends compute on envs where the agent can learn these hard tasks rather than
+the easy ones.
+</p>
+
+<h2>Crafting<h2>
+
+<p>
+<img src="/image/sgs/sgs_make_wood_sword.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_make_iron_sword.png" style="width: 40%; height: 40%;">
+</p>
+
+<h1>Overview</h1>
+
+<p>
+<img src="/image/sgs/sgs_achievements.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_epi_len.png" style="width: 40%; height: 40%;">
+<img src="/image/sgs/sgs_epi_rew.png" style="width: 40%; height: 40%;">
+</p>
+
+<p>
+Uniform sampling has higher achievements and average episode length. SGS has higher average reward because
+it was busy doing hard stuff which had higher reward.
+</p>
+
+</div>
+<footer>
+    <br>
+    <br>
+    <s>Powered by Bear ʕ•ᴥ•ʔ</s>
+    <p>Screw Be*r, this was generated by python 🐍</p>
+  </footer>
+</body>
+</html>
